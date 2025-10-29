@@ -1,38 +1,43 @@
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8080
-  },
-  "inlets": [
-    {
-      "name": "github-main",
-      "type": "github",
-      "path": "/webhook/github"
+    "server": {
+        "host": "0.0.0.0",
+        "port": 8080
     },
-    {
-      "name": "generic-webhook",
-      "type": "http",
-      "path": "/webhook/http"
-    }
-  ],
-  "outlets": [
-    {
-      "name": "wecom-dev",
-      "type": "wecom",
-      "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE"
+    "inlets": [
+        {
+            "name": "github-main",
+            "type": "github",
+            "path": "/webhook/github"
+        },
+        {
+            "name": "watchtower-main",
+            "type": "watchtower",
+            "path": "/webhook/github"
+        },
+        {
+            "name": "generic-webhook",
+            "type": "http",
+            "path": "/webhook/http"
+        }
+    ],
+    "outlets": [
+        {
+            "name": "wecom-dev",
+            "type": "wecom",
+            "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE"
+        },
+        {
+            "name": "wecom-ops",
+            "type": "wecom",
+            "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_ANOTHER_KEY_HERE"
+        }
+    ],
+    "routes": {
+        "github-main": ["wecom-dev", "wecom-ops"],
+        "generic-webhook": ["wecom-dev"]
     },
-    {
-      "name": "wecom-ops",
-      "type": "wecom",
-      "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_ANOTHER_KEY_HERE"
+    "retry": {
+        "max_attempts": 3,
+        "initial_delay_ms": 1000
     }
-  ],
-  "routes": {
-    "github-main": ["wecom-dev", "wecom-ops"],
-    "generic-webhook": ["wecom-dev"]
-  },
-  "retry": {
-    "max_attempts": 3,
-    "initial_delay_ms": 1000
-  }
 }

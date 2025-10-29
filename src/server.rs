@@ -1,6 +1,7 @@
 use crate::config::{Config, InletConfig, InletType};
 use crate::inlet::github::GitHubEvent;
 use crate::inlet::http::HttpInlet;
+use crate::inlet::watchtower::WatchtowerInlet;
 use crate::router::Router;
 use axum::{
     extract::State,
@@ -149,6 +150,10 @@ async fn handle_webhook(
         InletType::Http => {
             // 通用 HTTP webhook
             HttpInlet::to_message(payload)
+        }
+        InletType::Watchtower => {
+            // Watchtower webhook (via shoutrrr)
+            WatchtowerInlet::to_message(payload)
         }
     };
 

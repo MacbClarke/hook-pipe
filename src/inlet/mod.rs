@@ -1,5 +1,6 @@
 pub mod github;
 pub mod http;
+pub mod watchtower;
 
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +34,24 @@ impl Message {
                 source,
                 message_type,
                 timestamp: chrono::Utc::now().timestamp(),
+            },
+        }
+    }
+
+    pub fn new_with_timestamp(
+        title: String,
+        content: String,
+        source: String,
+        message_type: String,
+        timestamp: i64,
+    ) -> Self {
+        Self {
+            title,
+            content,
+            metadata: MessageMetadata {
+                source,
+                message_type,
+                timestamp,
             },
         }
     }

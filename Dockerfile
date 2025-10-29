@@ -20,7 +20,7 @@ FROM alpine:latest
 WORKDIR /app
 
 # Install CA certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 
 # Copy the built binary from builder stage
 COPY --from=builder /app/target/release/hook-pipe .

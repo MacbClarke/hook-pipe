@@ -53,6 +53,7 @@ pub struct Repository {
     pub name: String,
     pub full_name: String,
     pub html_url: String,
+    pub pushed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -150,12 +151,22 @@ impl GitHubEvent {
             event.compare
         );
 
-        Message::new(
-            format!("Push to {}/{}", event.repository.name, branch),
-            content,
-            "github".to_string(),
-            "push".to_string(),
-        )
+        if let Some(pushed_at) = event.repository.pushed_at {
+            Message::new_with_timestamp(
+                format!("Push to {}/{}", event.repository.name, branch),
+                content,
+                "github".to_string(),
+                "push".to_string(),
+                pushed_at,
+            )
+        } else {
+            Message::new(
+                format!("Push to {}/{}", event.repository.name, branch),
+                content,
+                "github".to_string(),
+                "push".to_string(),
+            )
+        }
     }
 
     fn pr_to_message(&self, event: &PullRequestEvent) -> Message {
@@ -191,12 +202,22 @@ impl GitHubEvent {
             pr.html_url
         );
 
-        Message::new(
-            format!("PR #{}: {}", event.number, pr.title),
-            content,
-            "github".to_string(),
-            format!("pull_request.{}", event.action),
-        )
+        if let Some(pushed_at) = event.repository.pushed_at {
+            Message::new_with_timestamp(
+                format!("PR #{}: {}", event.number, pr.title),
+                content,
+                "github".to_string(),
+                format!("pull_request.{}", event.action),
+                pushed_at,
+            )
+        } else {
+            Message::new(
+                format!("PR #{}: {}", event.number, pr.title),
+                content,
+                "github".to_string(),
+                format!("pull_request.{}", event.action),
+            )
+        }
     }
 }
 
@@ -211,7 +232,8 @@ mod tests {
             "repository": {
                 "name": "test-repo",
                 "full_name": "user/test-repo",
-                "html_url": "https://github.com/user/test-repo"
+                "html_url": "https://github.com/user/test-repo",
+                "pushed_at": 1234567890
             },
             "pusher": {
                 "name": "testuser",

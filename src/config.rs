@@ -32,6 +32,7 @@ pub struct InletConfig {
 pub enum InletType {
     Github,
     Http,
+    Watchtower,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
