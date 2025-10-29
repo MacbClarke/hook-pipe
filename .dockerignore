@@ -1,0 +1,18 @@
+# Build artifacts
+target/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+CLAUDE.md
+
+# Config files (user will mount their own)
+config.json
+
+# IDE
+.vscode/
+.idea/

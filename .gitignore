@@ -1,0 +1,20 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Config files (exclude actual config, keep example)
+config.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
