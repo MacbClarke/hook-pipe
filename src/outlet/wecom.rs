@@ -1,5 +1,6 @@
 use super::Outlet;
 use crate::inlet::Message;
+use crate::util;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -46,17 +47,8 @@ impl WecomOutlet {
             message.content,
             message.metadata.source,
             message.metadata.message_type,
-            Self::format_timestamp(message.metadata.timestamp)
+            util::format_timestamp_local(message.metadata.timestamp)
         )
-    }
-
-    fn format_timestamp(timestamp: i64) -> String {
-        use chrono::{Local, TimeZone};
-
-        match Local.timestamp_opt(timestamp, 0) {
-            chrono::LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M:%S").to_string(),
-            _ => timestamp.to_string(),
-        }
     }
 }
 

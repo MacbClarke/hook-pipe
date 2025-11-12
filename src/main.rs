@@ -4,6 +4,7 @@ mod outlet;
 mod retry;
 mod router;
 mod server;
+mod util;
 
 use anyhow::{Context, Result};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
