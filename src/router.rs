@@ -1,7 +1,7 @@
 use crate::config::{Config, OutletConfig, OutletType};
 use crate::inlet::Message;
-use crate::outlet::wecom::WecomOutlet;
 use crate::outlet::Outlet;
+use crate::outlet::wecom::WecomOutlet;
 use crate::retry::RetryPolicy;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -25,10 +25,8 @@ impl Router {
             outlets.insert(outlet_config.name.clone(), outlet);
         }
 
-        let retry_policy = RetryPolicy::new(
-            config.retry.max_attempts,
-            config.retry.initial_delay_ms,
-        );
+        let retry_policy =
+            RetryPolicy::new(config.retry.max_attempts, config.retry.initial_delay_ms);
 
         Ok(Self {
             outlets,
@@ -41,10 +39,7 @@ impl Router {
     fn create_outlet(config: &OutletConfig) -> Result<Arc<dyn Outlet>> {
         match config.outlet_type {
             OutletType::Wecom => {
-                let outlet = WecomOutlet::new(
-                    config.name.clone(),
-                    config.webhook_url.clone(),
-                );
+                let outlet = WecomOutlet::new(config.name.clone(), config.webhook_url.clone());
                 Ok(Arc::new(outlet))
             }
         }
@@ -53,9 +48,10 @@ impl Router {
     /// 路由消息到对应的出口
     pub async fn route(&self, inlet_name: &str, message: Message) -> Result<()> {
         // 查找该入口对应的出口列表
-        let outlet_names = self.routes.get(inlet_name).ok_or_else(|| {
-            anyhow::anyhow!("No route configured for inlet: {}", inlet_name)
-        })?;
+        let outlet_names = self
+            .routes
+            .get(inlet_name)
+            .ok_or_else(|| anyhow::anyhow!("No route configured for inlet: {}", inlet_name))?;
 
         if outlet_names.is_empty() {
             tracing::warn!(
@@ -76,9 +72,10 @@ impl Router {
         let mut tasks = Vec::new();
 
         for outlet_name in outlet_names {
-            let outlet = self.outlets.get(outlet_name).ok_or_else(|| {
-                anyhow::anyhow!("Outlet '{}' not found", outlet_name)
-            })?;
+            let outlet = self
+                .outlets
+                .get(outlet_name)
+                .ok_or_else(|| anyhow::anyhow!("Outlet '{}' not found", outlet_name))?;
 
             let outlet = Arc::clone(outlet);
             let message = message.clone();
@@ -87,9 +84,7 @@ impl Router {
             // 为每个出口创建一个异步任务
             let task = tokio::spawn(async move {
                 retry_policy
-                    .execute(|| async {
-                        outlet.send(&message).await
-                    })
+                    .execute(|| async { outlet.send(&message).await })
                     .await
             });
 

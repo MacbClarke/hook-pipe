@@ -18,16 +18,15 @@ impl WatchtowerInlet {
     /// 但用户可以通过配置自定义字段名和添加额外字段
     pub fn to_message(payload: Value) -> Message {
         // 尝试提取 title，支持多种可能的字段名
-        let title = Self::extract_string_field(
-            &payload,
-            &["title", "Title", "subject", "Subject"],
-        )
-        .unwrap_or_else(|| "Watchtower Notification".to_string());
+        let title = Self::extract_string_field(&payload, &["title", "Title", "subject", "Subject"])
+            .unwrap_or_else(|| "Watchtower Notification".to_string());
 
         // 尝试提取 message/content
         let message_text = Self::extract_string_field(
             &payload,
-            &["message", "Message", "text", "Text", "body", "Body", "content", "Content"],
+            &[
+                "message", "Message", "text", "Text", "body", "Body", "content", "Content",
+            ],
         )
         .unwrap_or_else(|| "No message provided".to_string());
 
@@ -37,8 +36,8 @@ impl WatchtowerInlet {
         // 如果 payload 中有其他字段，将它们也包含进来
         if let Some(obj) = payload.as_object() {
             let known_fields = [
-                "title", "Title", "message", "Message", "text", "Text",
-                "body", "Body", "content", "Content", "subject", "Subject",
+                "title", "Title", "message", "Message", "text", "Text", "body", "Body", "content",
+                "Content", "subject", "Subject",
             ];
 
             let extra_fields: Vec<_> = obj

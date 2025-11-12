@@ -4,11 +4,11 @@ use crate::inlet::http::HttpInlet;
 use crate::inlet::watchtower::WatchtowerInlet;
 use crate::router::Router;
 use axum::{
+    Json, Router as AxumRouter,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
-    Json, Router as AxumRouter,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -158,10 +158,7 @@ async fn handle_webhook(
     };
 
     // 路由消息到出口
-    state
-        .router
-        .route(&inlet_config.name, message)
-        .await?;
+    state.router.route(&inlet_config.name, message).await?;
 
     Ok(Json(serde_json::json!({
         "status": "success",

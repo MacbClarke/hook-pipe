@@ -30,10 +30,7 @@ impl RetryPolicy {
             match operation().await {
                 Ok(result) => {
                     if attempt > 1 {
-                        tracing::info!(
-                            attempt = attempt,
-                            "Operation succeeded after retry"
-                        );
+                        tracing::info!(attempt = attempt, "Operation succeeded after retry");
                     }
                     return Ok(result);
                 }
@@ -86,8 +83,8 @@ impl RetryPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
     #[tokio::test]
     async fn test_retry_success_on_first_attempt() {
