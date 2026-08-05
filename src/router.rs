@@ -1,6 +1,7 @@
 use crate::config::{Config, OutletConfig, OutletType};
 use crate::inlet::Message;
 use crate::outlet::Outlet;
+use crate::outlet::telegram::TelegramOutlet;
 use crate::outlet::wecom::WecomOutlet;
 use crate::retry::RetryPolicy;
 use anyhow::Result;
@@ -39,7 +40,34 @@ impl Router {
     fn create_outlet(config: &OutletConfig) -> Result<Arc<dyn Outlet>> {
         match config.outlet_type {
             OutletType::Wecom => {
-                let outlet = WecomOutlet::new(config.name.clone(), config.webhook_url.clone());
+                let webhook_url = config
+                    .webhook_url
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Outlet '{}' missing webhook_url for WeCom", config.name)
+                    })?
+                    .clone();
+                let outlet = WecomOutlet::new(config.name.clone(), webhook_url);
+                Ok(Arc::new(outlet))
+            }
+            OutletType::Telegram => {
+                let bot_token = config
+                    .bot_token
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Outlet '{}' missing bot_token for Telegram", config.name)
+                    })?
+                    .clone();
+
+                let chat_id = config
+                    .chat_id
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Outlet '{}' missing chat_id for Telegram", config.name)
+                    })?
+                    .clone();
+
+                let outlet = TelegramOutlet::new(config.name.clone(), bot_token, chat_id);
                 Ok(Arc::new(outlet))
             }
         }
@@ -157,7 +185,9 @@ mod tests {
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),
                 outlet_type: OutletType::Wecom,
-                webhook_url: "https://example.com".to_string(),
+                webhook_url: Some("https://example.com".to_string()),
+                bot_token: None,
+                chat_id: None,
             }],
             routes: {
                 let mut map = HashMap::new();

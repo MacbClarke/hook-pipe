@@ -30,11 +30,18 @@
             "name": "wecom-ops",
             "type": "wecom",
             "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_ANOTHER_KEY_HERE"
+        },
+        {
+            "name": "telegram-alerts",
+            "type": "telegram",
+            "bot_token": "123456:ABCDEF",
+            "chat_id": "-1001234567890"
         }
     ],
     "routes": {
         "github-main": ["wecom-dev", "wecom-ops"],
-        "generic-webhook": ["wecom-dev"]
+        "generic-webhook": ["wecom-dev"],
+        "watchtower-main": ["telegram-alerts"]
     },
     "retry": {
         "max_attempts": 3,

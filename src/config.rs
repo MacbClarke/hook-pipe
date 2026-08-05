@@ -40,13 +40,19 @@ pub struct OutletConfig {
     pub name: String,
     #[serde(rename = "type")]
     pub outlet_type: OutletType,
-    pub webhook_url: String,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    #[serde(default)]
+    pub bot_token: Option<String>,
+    #[serde(default)]
+    pub chat_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OutletType {
     Wecom,
+    Telegram,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -90,6 +96,22 @@ impl Config {
         for outlet in &self.outlets {
             if !outlet_names.insert(outlet.name.clone()) {
                 anyhow::bail!("Duplicate outlet name: {}", outlet.name);
+            }
+
+            match outlet.outlet_type {
+                OutletType::Wecom => {
+                    if outlet.webhook_url.as_deref().is_none() {
+                        anyhow::bail!("WeCom outlet '{}' requires 'webhook_url'", outlet.name);
+                    }
+                }
+                OutletType::Telegram => {
+                    if outlet.bot_token.as_deref().is_none() {
+                        anyhow::bail!("Telegram outlet '{}' requires 'bot_token'", outlet.name);
+                    }
+                    if outlet.chat_id.as_deref().is_none() {
+                        anyhow::bail!("Telegram outlet '{}' requires 'chat_id'", outlet.name);
+                    }
+                }
             }
         }
 
@@ -148,7 +170,9 @@ mod tests {
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),
                 outlet_type: OutletType::Wecom,
-                webhook_url: "https://example.com".to_string(),
+                webhook_url: Some("https://example.com".to_string()),
+                bot_token: None,
+                chat_id: None,
             }],
             routes: {
                 let mut map = HashMap::new();

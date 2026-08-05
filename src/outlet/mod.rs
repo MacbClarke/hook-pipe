@@ -1,3 +1,4 @@
+pub mod telegram;
 pub mod wecom;
 
 use crate::inlet::Message;
