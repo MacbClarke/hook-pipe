@@ -174,6 +174,16 @@ impl GitHubEvent {
         }
     }
 
+    /// 获取事件对应的仓库信息（若事件中包含仓库信息）
+    pub fn repository(&self) -> Option<&Repository> {
+        match self {
+            GitHubEvent::Push(event) => Some(&event.repository),
+            GitHubEvent::PullRequest(event) => Some(&event.repository),
+            GitHubEvent::WorkflowRun(event) => Some(&event.repository),
+            GitHubEvent::Unknown(_) => None,
+        }
+    }
+
     /// 转换为统一的消息格式
     pub fn to_message(&self) -> Message {
         match self {
@@ -602,5 +612,28 @@ mod tests {
         assert!(message.content.contains("success"));
         assert!(message.content.contains("testuser"));
         assert!(message.content.contains("f20a8a8"));
+    }
+
+    #[test]
+    fn test_github_event_repository_getter() {
+        let payload = serde_json::json!({
+            "ref": "refs/heads/main",
+            "repository": {
+                "name": "my-repo",
+                "full_name": "org/my-repo",
+                "html_url": "https://github.com/org/my-repo"
+            },
+            "pusher": { "name": "user" },
+            "commits": [],
+            "compare": "https://github.com/org/my-repo/compare/a...b"
+        });
+
+        let event = GitHubEvent::parse("push", payload).unwrap();
+        let repo = event.repository().unwrap();
+        assert_eq!(repo.name, "my-repo");
+        assert_eq!(repo.full_name, "org/my-repo");
+
+        let unknown_event = GitHubEvent::Unknown("ping".to_string());
+        assert!(unknown_event.repository().is_none());
     }
 }

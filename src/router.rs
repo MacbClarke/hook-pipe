@@ -181,6 +181,7 @@ mod tests {
                 name: "test".to_string(),
                 inlet_type: InletType::Github,
                 path: "/webhook".to_string(),
+                repositories: None,
             }],
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),

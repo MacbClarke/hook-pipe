@@ -122,7 +122,14 @@ RUST_LOG=debug cargo run --release
 - `type`: 入口类型
   - `github`: GitHub Webhook
   - `http`: 通用 HTTP Webhook
+  - `watchtower`: Watchtower Webhook
 - `path`: webhook 接收路径
+- `repositories`: （可选，针对 GitHub inlet）允许接收消息的仓库列表，未配置或为空时接收所有仓库消息。支持格式：
+  - `"owner/repo"`: 精确匹配指定仓库（大小写不敏感）
+  - `"repo"`: 匹配仓库名（大小写不敏感）
+  - `"owner/*"`: 匹配指定组织或用户下的所有仓库
+  - `"*"`: 匹配所有仓库
+  - 也支持单一字符串格式，例如 `"repositories": "owner/repo"`，别名支持 `allowed_repositories`
 
 ### Outlets（出口）
 

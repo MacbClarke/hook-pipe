@@ -145,6 +145,22 @@ async fn handle_webhook(
 
             // 解析 GitHub 事件
             let github_event = GitHubEvent::parse(event_type, payload)?;
+
+            // 检查仓库过滤
+            if let Some(repo) = github_event.repository()
+                && !inlet_config.is_repo_allowed(&repo.full_name, &repo.name)
+            {
+                tracing::info!(
+                    inlet_name = %inlet_config.name,
+                    repo = %repo.full_name,
+                    "Ignored GitHub event from unauthorized repository"
+                );
+                return Ok(Json(serde_json::json!({
+                    "status": "ignored",
+                    "message": format!("Repository '{}' is not in the allowed repositories list", repo.full_name)
+                })));
+            }
+
             github_event.to_message()
         }
         InletType::Http => {
@@ -175,5 +191,85 @@ mod tests {
         let err = ApiError(anyhow::anyhow!("test error"));
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_handle_webhook_repo_filtering() {
+        use crate::config::{default_retry_config, OutletConfig, OutletType, ServerConfig};
+        use axum::body::to_bytes;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let config = Config {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+            },
+            inlets: vec![InletConfig {
+                name: "gh-filter".to_string(),
+                inlet_type: InletType::Github,
+                path: "/webhook/github".to_string(),
+                repositories: Some(vec!["org/allowed-repo".to_string()]),
+            }],
+            outlets: vec![OutletConfig {
+                name: "dummy".to_string(),
+                outlet_type: OutletType::Wecom,
+                webhook_url: Some("https://example.com/mock".to_string()),
+                bot_token: None,
+                chat_id: None,
+            }],
+            routes: {
+                let mut map = HashMap::new();
+                map.insert("gh-filter".to_string(), vec!["dummy".to_string()]);
+                map
+            },
+            retry: default_retry_config(),
+        };
+
+        let mut inlet_config_map = HashMap::new();
+        let mut path_to_inlet_map = HashMap::new();
+        for inlet in &config.inlets {
+            inlet_config_map.insert(inlet.name.clone(), inlet.clone());
+            path_to_inlet_map.insert(inlet.path.clone(), inlet.name.clone());
+        }
+
+        let router = Arc::new(Router::from_config(&config).unwrap());
+        let state = AppState {
+            router,
+            inlet_config: Arc::new(inlet_config_map),
+            path_to_inlet: Arc::new(path_to_inlet_map),
+        };
+
+        let app = AxumRouter::new()
+            .route("/webhook/github", post(handle_webhook))
+            .with_state(state);
+
+        // 1. 测试不在白名单的仓库被过滤 (status: ignored)
+        let blocked_payload = serde_json::json!({
+            "ref": "refs/heads/main",
+            "repository": {
+                "name": "other-repo",
+                "full_name": "org/other-repo",
+                "html_url": "https://github.com/org/other-repo"
+            },
+            "pusher": { "name": "user" },
+            "commits": [],
+            "compare": "https://github.com/org/other-repo/compare/a...b"
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/webhook/github")
+            .header("Content-Type", "application/json")
+            .header("X-GitHub-Event", "push")
+            .body(axum::body::Body::from(serde_json::to_vec(&blocked_payload).unwrap()))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json_body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json_body["status"], "ignored");
+        assert!(json_body["message"].as_str().unwrap().contains("not in the allowed repositories"));
     }
 }

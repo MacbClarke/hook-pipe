@@ -25,6 +25,94 @@ pub struct InletConfig {
     #[serde(rename = "type")]
     pub inlet_type: InletType,
     pub path: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_repositories",
+        alias = "allowed_repositories"
+    )]
+    pub repositories: Option<Vec<String>>,
+}
+
+/// 自定义反序列化函数，支持单一字符串或字符串数组
+fn deserialize_repositories<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        Single(String),
+        Multiple(Vec<String>),
+    }
+
+    match Option::<StringOrVec>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(StringOrVec::Single(s)) => {
+            let s = s.trim();
+            if s.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(vec![s.to_string()]))
+            }
+        }
+        Some(StringOrVec::Multiple(vec)) => {
+            let filtered: Vec<String> = vec
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if filtered.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(filtered))
+            }
+        }
+    }
+}
+
+impl InletConfig {
+    /// 检查指定仓库是否被该 inlet 允许
+    /// 如果未配置 repositories 或列表为空，则默认允许所有仓库
+    pub fn is_repo_allowed(&self, repo_full_name: &str, repo_name: &str) -> bool {
+        match &self.repositories {
+            Some(allowed_list) if !allowed_list.is_empty() => allowed_list
+                .iter()
+                .any(|pattern| Self::matches_repo(pattern, repo_full_name, repo_name)),
+            _ => true,
+        }
+    }
+
+    /// 匹配仓库规则
+    /// 支持以下格式：
+    /// - "owner/repo": 精确匹配 full_name（大小写不敏感）
+    /// - "repo": 匹配 name 或 full_name（大小写不敏感）
+    /// - "owner/*": 匹配指定组织/用户下的所有仓库
+    /// - "*": 匹配所有仓库
+    pub fn matches_repo(pattern: &str, repo_full_name: &str, repo_name: &str) -> bool {
+        let pattern = pattern.trim();
+        if pattern.is_empty() {
+            return false;
+        }
+
+        if pattern == "*" {
+            return true;
+        }
+
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            let prefix_with_slash = format!("{}/", prefix);
+            return repo_full_name
+                .to_lowercase()
+                .starts_with(&prefix_with_slash.to_lowercase());
+        }
+
+        if pattern.contains('/') {
+            repo_full_name.eq_ignore_ascii_case(pattern)
+        } else {
+            repo_name.eq_ignore_ascii_case(pattern)
+                || repo_full_name.eq_ignore_ascii_case(pattern)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -61,7 +149,7 @@ pub struct RetryConfig {
     pub initial_delay_ms: u64,
 }
 
-fn default_retry_config() -> RetryConfig {
+pub fn default_retry_config() -> RetryConfig {
     RetryConfig {
         max_attempts: 3,
         initial_delay_ms: 1000,
@@ -166,6 +254,7 @@ mod tests {
                 name: "test".to_string(),
                 inlet_type: InletType::Github,
                 path: "/webhook".to_string(),
+                repositories: None,
             }],
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),
@@ -183,5 +272,84 @@ mod tests {
         };
 
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_inlet_repositories_deserialize() {
+        let json_str = r#"{
+            "name": "gh",
+            "type": "github",
+            "path": "/webhook/github",
+            "repositories": ["owner/repo1", "owner/*", "repo2"]
+        }"#;
+
+        let inlet: InletConfig = serde_json::from_str(json_str).unwrap();
+        assert_eq!(
+            inlet.repositories,
+            Some(vec![
+                "owner/repo1".to_string(),
+                "owner/*".to_string(),
+                "repo2".to_string()
+            ])
+        );
+
+        // 单个字符串反序列化
+        let json_single = r#"{
+            "name": "gh",
+            "type": "github",
+            "path": "/webhook/github",
+            "repositories": "owner/repo1"
+        }"#;
+        let inlet_single: InletConfig = serde_json::from_str(json_single).unwrap();
+        assert_eq!(inlet_single.repositories, Some(vec!["owner/repo1".to_string()]));
+
+        // alias allowed_repositories
+        let json_alias = r#"{
+            "name": "gh",
+            "type": "github",
+            "path": "/webhook/github",
+            "allowed_repositories": ["owner/repo1"]
+        }"#;
+        let inlet_alias: InletConfig = serde_json::from_str(json_alias).unwrap();
+        assert_eq!(inlet_alias.repositories, Some(vec!["owner/repo1".to_string()]));
+    }
+
+    #[test]
+    fn test_inlet_repo_matching() {
+        let inlet = InletConfig {
+            name: "gh".to_string(),
+            inlet_type: InletType::Github,
+            path: "/webhook/github".to_string(),
+            repositories: Some(vec![
+                "octocat/hello-world".to_string(),
+                "my-org/*".to_string(),
+                "special-repo".to_string(),
+            ]),
+        };
+
+        // 精确匹配 owner/repo（忽略大小写）
+        assert!(inlet.is_repo_allowed("octocat/hello-world", "hello-world"));
+        assert!(inlet.is_repo_allowed("OctoCat/Hello-World", "Hello-World"));
+
+        // 通配符匹配 owner/*
+        assert!(inlet.is_repo_allowed("my-org/project-a", "project-a"));
+        assert!(inlet.is_repo_allowed("MY-ORG/project-b", "project-b"));
+        assert!(!inlet.is_repo_allowed("other-org/project-a", "project-a"));
+
+        // 单独仓库名称匹配 repo
+        assert!(inlet.is_repo_allowed("any-owner/special-repo", "special-repo"));
+        assert!(inlet.is_repo_allowed("special-repo", "special-repo"));
+
+        // 未在列表中的仓库
+        assert!(!inlet.is_repo_allowed("octocat/other-repo", "other-repo"));
+
+        // 如果未配置 repositories，则默认允许全部
+        let inlet_none = InletConfig {
+            name: "gh".to_string(),
+            inlet_type: InletType::Github,
+            path: "/webhook/github".to_string(),
+            repositories: None,
+        };
+        assert!(inlet_none.is_repo_allowed("any/repo", "repo"));
     }
 }
