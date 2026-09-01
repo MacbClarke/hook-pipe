@@ -182,6 +182,7 @@ mod tests {
                 inlet_type: InletType::Github,
                 path: "/webhook".to_string(),
                 repositories: None,
+                workflow_run_actions: None,
             }],
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),

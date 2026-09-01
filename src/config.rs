@@ -28,14 +28,22 @@ pub struct InletConfig {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_repositories",
+        deserialize_with = "deserialize_string_or_vec",
         alias = "allowed_repositories"
     )]
     pub repositories: Option<Vec<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_string_or_vec",
+        alias = "workflow_actions",
+        alias = "allowed_workflow_run_actions"
+    )]
+    pub workflow_run_actions: Option<Vec<String>>,
 }
 
 /// 自定义反序列化函数，支持单一字符串或字符串数组
-fn deserialize_repositories<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -111,6 +119,17 @@ impl InletConfig {
         } else {
             repo_name.eq_ignore_ascii_case(pattern)
                 || repo_full_name.eq_ignore_ascii_case(pattern)
+        }
+    }
+
+    /// 检查 workflow_run 的 action（如 completed, in_progress, requested）是否被允许
+    /// 如果未配置 workflow_run_actions 或列表为空，则默认允许所有 action
+    pub fn is_workflow_run_action_allowed(&self, action: &str) -> bool {
+        match &self.workflow_run_actions {
+            Some(actions) if !actions.is_empty() => {
+                actions.iter().any(|a| a.eq_ignore_ascii_case(action))
+            }
+            _ => true,
         }
     }
 }
@@ -255,6 +274,7 @@ mod tests {
                 inlet_type: InletType::Github,
                 path: "/webhook".to_string(),
                 repositories: None,
+                workflow_run_actions: None,
             }],
             outlets: vec![OutletConfig {
                 name: "wecom".to_string(),
@@ -325,6 +345,7 @@ mod tests {
                 "my-org/*".to_string(),
                 "special-repo".to_string(),
             ]),
+            workflow_run_actions: None,
         };
 
         // 精确匹配 owner/repo（忽略大小写）
@@ -349,7 +370,65 @@ mod tests {
             inlet_type: InletType::Github,
             path: "/webhook/github".to_string(),
             repositories: None,
+            workflow_run_actions: None,
         };
         assert!(inlet_none.is_repo_allowed("any/repo", "repo"));
+    }
+
+    #[test]
+    fn test_inlet_workflow_run_actions_deserialization() {
+        // array
+        let json_array = r#"{
+            "name": "gh",
+            "type": "github",
+            "path": "/webhook/github",
+            "workflow_run_actions": ["completed", "in_progress"]
+        }"#;
+        let inlet_array: InletConfig = serde_json::from_str(json_array).unwrap();
+        assert_eq!(
+            inlet_array.workflow_run_actions,
+            Some(vec!["completed".to_string(), "in_progress".to_string()])
+        );
+
+        // single string
+        let json_single = r#"{
+            "name": "gh",
+            "type": "github",
+            "path": "/webhook/github",
+            "workflow_actions": "completed"
+        }"#;
+        let inlet_single: InletConfig = serde_json::from_str(json_single).unwrap();
+        assert_eq!(
+            inlet_single.workflow_run_actions,
+            Some(vec!["completed".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_inlet_workflow_run_action_matching() {
+        let inlet = InletConfig {
+            name: "gh".to_string(),
+            inlet_type: InletType::Github,
+            path: "/webhook/github".to_string(),
+            repositories: None,
+            workflow_run_actions: Some(vec!["completed".to_string(), "in_progress".to_string()]),
+        };
+
+        assert!(inlet.is_workflow_run_action_allowed("completed"));
+        assert!(inlet.is_workflow_run_action_allowed("Completed"));
+        assert!(inlet.is_workflow_run_action_allowed("in_progress"));
+        assert!(!inlet.is_workflow_run_action_allowed("requested"));
+        assert!(!inlet.is_workflow_run_action_allowed("unknown"));
+
+        // 未配置时默认允许全部
+        let inlet_none = InletConfig {
+            name: "gh".to_string(),
+            inlet_type: InletType::Github,
+            path: "/webhook/github".to_string(),
+            repositories: None,
+            workflow_run_actions: None,
+        };
+        assert!(inlet_none.is_workflow_run_action_allowed("requested"));
+        assert!(inlet_none.is_workflow_run_action_allowed("completed"));
     }
 }

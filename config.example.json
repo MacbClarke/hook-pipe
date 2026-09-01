@@ -11,6 +11,10 @@
             "repositories": [
                 "owner/repo",
                 "org/*"
+            ],
+            "workflow_run_actions": [
+                "completed",
+                "in_progress"
             ]
         },
         {

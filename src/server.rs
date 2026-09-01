@@ -161,6 +161,21 @@ async fn handle_webhook(
                 })));
             }
 
+            // 检查 workflow_run 事件 action 过滤
+            if let GitHubEvent::WorkflowRun(ref run_event) = github_event
+                && !inlet_config.is_workflow_run_action_allowed(&run_event.action)
+            {
+                tracing::info!(
+                    inlet_name = %inlet_config.name,
+                    action = %run_event.action,
+                    "Ignored GitHub workflow_run event with filtered action"
+                );
+                return Ok(Json(serde_json::json!({
+                    "status": "ignored",
+                    "message": format!("workflow_run action '{}' is not in the allowed actions list", run_event.action)
+                })));
+            }
+
             github_event.to_message()
         }
         InletType::Http => {
@@ -210,6 +225,7 @@ mod tests {
                 inlet_type: InletType::Github,
                 path: "/webhook/github".to_string(),
                 repositories: Some(vec!["org/allowed-repo".to_string()]),
+                workflow_run_actions: None,
             }],
             outlets: vec![OutletConfig {
                 name: "dummy".to_string(),
@@ -271,5 +287,104 @@ mod tests {
         let json_body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json_body["status"], "ignored");
         assert!(json_body["message"].as_str().unwrap().contains("not in the allowed repositories"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_webhook_workflow_run_action_filtering() {
+        use crate::config::{default_retry_config, OutletConfig, OutletType, ServerConfig};
+        use axum::body::to_bytes;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let config = Config {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+            },
+            inlets: vec![InletConfig {
+                name: "gh-actions-filter".to_string(),
+                inlet_type: InletType::Github,
+                path: "/webhook/github".to_string(),
+                repositories: None,
+                workflow_run_actions: Some(vec!["completed".to_string(), "in_progress".to_string()]),
+            }],
+            outlets: vec![OutletConfig {
+                name: "dummy".to_string(),
+                outlet_type: OutletType::Wecom,
+                webhook_url: Some("https://example.com".to_string()),
+                bot_token: None,
+                chat_id: None,
+            }],
+            routes: {
+                let mut map = HashMap::new();
+                map.insert("gh-actions-filter".to_string(), vec!["dummy".to_string()]);
+                map
+            },
+            retry: default_retry_config(),
+        };
+
+        let mut inlet_config_map = HashMap::new();
+        let mut path_to_inlet_map = HashMap::new();
+        for inlet in &config.inlets {
+            inlet_config_map.insert(inlet.name.clone(), inlet.clone());
+            path_to_inlet_map.insert(inlet.path.clone(), inlet.name.clone());
+        }
+
+        let router = Arc::new(Router::from_config(&config).unwrap());
+        let state = AppState {
+            router,
+            inlet_config: Arc::new(inlet_config_map),
+            path_to_inlet: Arc::new(path_to_inlet_map),
+        };
+
+        let app = AxumRouter::new()
+            .route("/webhook/github", post(handle_webhook))
+            .with_state(state);
+
+        // 1. 测试 action 为 requested 时被忽略
+        let requested_payload = serde_json::json!({
+            "action": "requested",
+            "workflow_run": {
+                "id": 12345u64,
+                "name": "CI",
+                "html_url": "https://github.com/org/repo/actions/runs/12345",
+                "status": "queued",
+                "conclusion": null,
+                "run_started_at": "2025-10-28T09:40:07Z",
+                "head_branch": "main",
+                "triggering_actor": {
+                    "login": "user",
+                    "html_url": "https://github.com/user"
+                },
+                "head_commit": {
+                    "id": "f20a8a8da460f0a6f737d7cbcad9f3febb3337ce",
+                    "message": "test",
+                    "author": {
+                        "name": "User",
+                        "email": "user@example.com"
+                    }
+                }
+            },
+            "repository": {
+                "name": "repo",
+                "full_name": "org/repo",
+                "html_url": "https://github.com/org/repo"
+            }
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/webhook/github")
+            .header("Content-Type", "application/json")
+            .header("X-GitHub-Event", "workflow_run")
+            .body(axum::body::Body::from(serde_json::to_vec(&requested_payload).unwrap()))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json_body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json_body["status"], "ignored");
+        assert!(json_body["message"].as_str().unwrap().contains("not in the allowed actions list"));
     }
 }

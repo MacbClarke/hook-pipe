@@ -130,6 +130,7 @@ RUST_LOG=debug cargo run --release
   - `"owner/*"`: 匹配指定组织或用户下的所有仓库
   - `"*"`: 匹配所有仓库
   - 也支持单一字符串格式，例如 `"repositories": "owner/repo"`，别名支持 `allowed_repositories`
+- `workflow_run_actions`: （可选，针对 GitHub inlet）允许接收的 `workflow_run` 事件 action 列表（例如 `["completed", "in_progress"]`）。未配置或为空时默认接收所有 action。支持数组或单一字符串，别名支持 `workflow_actions`、`allowed_workflow_run_actions`。常见 action 包含 `completed`、`in_progress`、`requested` 等。
 
 ### Outlets（出口）
 
