@@ -119,6 +119,8 @@ pub struct Repository {
     pub name: String,
     pub full_name: String,
     pub html_url: String,
+    #[serde(default)]
+    pub default_branch: Option<String>,
     #[serde(default, deserialize_with = "deserialize_pushed_at")]
     pub pushed_at: Option<i64>,
 }
@@ -227,13 +229,28 @@ impl GitHubEvent {
             String::new()
         };
 
+        let is_branch = event.git_ref.starts_with("refs/heads/");
+        let is_default = match &event.repository.default_branch {
+            Some(default_branch) => branch.eq_ignore_ascii_case(default_branch),
+            None => branch == "main" || branch == "master",
+        };
+
+        let pr_link = if is_branch && !is_default {
+            format!(
+                "\n[Open Pull Request]({}/pull/new/{})",
+                event.repository.html_url, branch
+            )
+        } else {
+            String::new()
+        };
+
         let content = format!(
             "**Repository:** [{}]({})\n\
              **Branch:** `{}`\n\
              **Pusher:** {}\n\
              **Commits:** {}\n\n\
              {}{}\n\n\
-             [View comparison]({})",
+             [View comparison]({}){}",
             event.repository.full_name,
             event.repository.html_url,
             branch,
@@ -241,7 +258,8 @@ impl GitHubEvent {
             event.commits.len(),
             commits_summary,
             more_commits,
-            event.compare
+            event.compare,
+            pr_link
         );
 
         if let Some(pushed_at) = event.repository.pushed_at {
@@ -639,5 +657,55 @@ mod tests {
 
         let unknown_event = GitHubEvent::Unknown("ping".to_string());
         assert!(unknown_event.repository().is_none());
+    }
+
+    #[test]
+    fn test_push_to_message_default_branch() {
+        let payload = serde_json::json!({
+            "ref": "refs/heads/main",
+            "repository": {
+                "name": "test-repo",
+                "full_name": "user/test-repo",
+                "html_url": "https://github.com/user/test-repo",
+                "default_branch": "main"
+            },
+            "pusher": { "name": "testuser" },
+            "commits": [{
+                "id": "1234567890abcdef",
+                "message": "fix bug",
+                "author": { "name": "test", "email": "test@test.com" },
+                "url": "https://github.com/user/test-repo/commit/1234567890abcdef"
+            }],
+            "compare": "https://github.com/user/test-repo/compare/a...b"
+        });
+
+        let event = GitHubEvent::parse("push", payload).unwrap();
+        let message = event.to_message();
+        assert!(!message.content.contains("Open Pull Request"));
+    }
+
+    #[test]
+    fn test_push_to_message_feature_branch() {
+        let payload = serde_json::json!({
+            "ref": "refs/heads/feature/awesome",
+            "repository": {
+                "name": "test-repo",
+                "full_name": "user/test-repo",
+                "html_url": "https://github.com/user/test-repo",
+                "default_branch": "main"
+            },
+            "pusher": { "name": "testuser" },
+            "commits": [{
+                "id": "1234567890abcdef",
+                "message": "feat: new feature",
+                "author": { "name": "test", "email": "test@test.com" },
+                "url": "https://github.com/user/test-repo/commit/1234567890abcdef"
+            }],
+            "compare": "https://github.com/user/test-repo/compare/a...b"
+        });
+
+        let event = GitHubEvent::parse("push", payload).unwrap();
+        let message = event.to_message();
+        assert!(message.content.contains("[Open Pull Request](https://github.com/user/test-repo/pull/new/feature/awesome)"));
     }
 }
