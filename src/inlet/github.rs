@@ -298,19 +298,22 @@ impl GitHubEvent {
 
         let content = format!(
             "{} **Pull Request {}**\n\n\
+             **Repository:** [{}]({})\n\
+             **Branch:** `{}` → `{}`\n\
              **Title:** {}\n\
              **Author:** [{}]({})\n\
-             **Status:** {}\n\
-             **Branch:** `{}` → `{}`\n\n\
+             **Status:** {}\n\n\
              [View Pull Request]({})",
             action_emoji,
             action_text,
+            event.repository.full_name,
+            event.repository.html_url,
+            pr.head.git_ref,
+            pr.base.git_ref,
             pr.title,
             pr.user.login,
             pr.user.html_url,
             pr.state,
-            pr.head.git_ref,
-            pr.base.git_ref,
             pr.html_url
         );
 
@@ -362,10 +365,10 @@ impl GitHubEvent {
         let content = format!(
             "{} **Workflow {}**\n\n\
              **Repository:** [{}]({})\n\
+             **Branch:** `{}`\n\
              **Workflow:** {}\n\
              **Status:** {}\n\
              **Triggered by:** [{}]({})\n\
-             **Branch:** `{}`\n\
              **Started at:** {}\n\
              **Commit:** `{}` {}\n\n\
              [View Workflow Run]({})",
@@ -373,11 +376,11 @@ impl GitHubEvent {
             event.action,
             event.repository.full_name,
             event.repository.html_url,
+            workflow.head_branch,
             workflow.name,
             status_text,
             workflow.triggering_actor.login,
             workflow.triggering_actor.html_url,
-            workflow.head_branch,
             util::format_iso8601_datetime(&workflow.run_started_at),
             short_sha,
             commit_message,
@@ -586,6 +589,8 @@ mod tests {
         let message = event.to_message();
 
         assert_eq!(message.title, "PR #42: Fix authentication bug");
+        assert!(message.content.contains("[test-org/test-repo](https://github.com/test-org/test-repo)"));
+        assert!(message.content.contains("`fix-auth` → `main`"));
         assert!(message.content.contains("testuser123"));
         assert!(message.content.contains("https://github.com/testuser123"));
         assert!(message.content.contains("🆕")); // opened emoji

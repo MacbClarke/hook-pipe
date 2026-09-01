@@ -19,8 +19,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Install CA certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates tzdata
+# Install CA certificates for HTTPS requests, tzdata, and tini
+RUN apk add --no-cache ca-certificates tzdata tini
 
 # Copy the built binary from builder stage
 COPY --from=builder /app/target/release/hook-pipe .
@@ -31,5 +31,6 @@ EXPOSE 8080
 # Set environment variables
 ENV RUST_LOG=info
 
-# Run the application
+# Run the application with tini
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["./hook-pipe"]
