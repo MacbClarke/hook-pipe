@@ -343,6 +343,7 @@ impl GitHubEvent {
 
         let content = format!(
             "{} **Workflow {}**\n\n\
+             **Repository:** [{}]({})\n\
              **Workflow:** {}\n\
              **Status:** {}\n\
              **Triggered by:** [{}]({})\n\
@@ -352,6 +353,8 @@ impl GitHubEvent {
              [View Workflow Run]({})",
             status_emoji,
             event.action,
+            event.repository.full_name,
+            event.repository.html_url,
             workflow.name,
             status_text,
             workflow.triggering_actor.login,
@@ -612,6 +615,7 @@ mod tests {
         assert!(message.content.contains("success"));
         assert!(message.content.contains("testuser"));
         assert!(message.content.contains("f20a8a8"));
+        assert!(message.content.contains("[test-org/test-repo](https://github.com/test-org/test-repo)"));
     }
 
     #[test]
